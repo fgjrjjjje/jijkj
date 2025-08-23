@@ -5060,6 +5060,7 @@ if (window.Telegram?.WebApp?.BackButton) {
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
   initUserData();
+  initSwipeHandlers();
   initPaymentPage();
   
   // Инициализация склада при загрузке, если он видим
@@ -5664,130 +5665,23 @@ let currentProduct = null;
 let activeCategory = 'all';
 let currentSort = 'none';
 
-// ===== УНИВЕРСАЛЬНОЕ ХРАНИЛИЩЕ ДЛЯ TELEGRAM =====
-function setStorage(key, value) {
-    // Пробуем Telegram Cloud Storage
-    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
-        Telegram.WebApp.CloudStorage.setItem(key, JSON.stringify(value), (err) => {
-            if (err) {
-                console.error('Ошибка Telegram Storage:', err);
-                // Fallback: сохраняем в localStorage
-                localStorage.setItem(key, JSON.stringify(value));
-            } else {
-                console.log('Сохранено в Telegram Cloud Storage');
-            }
-        });
-    } else {
-        // Fallback: обычный localStorage
-        localStorage.setItem(key, JSON.stringify(value));
-        console.log('Сохранено в localStorage');
-    }
-}
-
-function getStorage(key, callback) {
-    // Пробуем Telegram Cloud Storage
-    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
-        Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
-            if (err || !value) {
-                console.log('Не найдено в Telegram Storage, пробуем localStorage');
-                const localValue = localStorage.getItem(key);
-                callback(localValue ? JSON.parse(localValue) : []);
-            } else {
-                callback(JSON.parse(value));
-            }
-        });
-    } else {
-        // Fallback: обычный localStorage
-        const value = localStorage.getItem(key);
-        callback(value ? JSON.parse(value) : []);
-    }
-}
-
-// ===== ТЕЛЕГРАМ STORAGE ФУНКЦИИ =====
-function setStorage(key, value) {
-    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
-        Telegram.WebApp.CloudStorage.setItem(key, JSON.stringify(value));
-    } else {
-        localStorage.setItem(key, JSON.stringify(value));
-    }
-}
-
-function getStorage(key, defaultValue = []) {
-    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
-        return new Promise((resolve) => {
-            Telegram.WebApp.CloudStorage.getItem(key, (error, value) => {
-                if (error || !value) {
-                    resolve(defaultValue);
-                } else {
-                    try {
-                        resolve(JSON.parse(value));
-                    } catch (e) {
-                        resolve(defaultValue);
-                    }
-                }
-            });
-        });
-    } else {
-        try {
-            const value = localStorage.getItem(key);
-            return Promise.resolve(value ? JSON.parse(value) : defaultValue);
-        } catch (e) {
-            return Promise.resolve(defaultValue);
-        }
-    }
-}
-
-
 // ===== ФУНКЦИИ ДЛЯ КОРЗИНЫ =====
 function addToCart(productId) {
-    console.log("=== addToCart вызван ===", productId);
+  const product = productsData.find(p => p.id === productId);
+  
+  if (product) {
+    // Добавляем товар в склад (глобальную корзину)
+    addToStorageCart(product);
     
-    const product = productsData.find(p => p.id === productId);
-    if (!product) return;
+    // Показываем уведомление
+    showToast('Товар добавлен в склад!');
     
-    getStorage('storageCart', function(storageCart) {
-        console.log("Загружена корзина:", storageCart);
-        
-        const existingItemIndex = storageCart.findIndex(item => item.id === product.id);
-        
-        if (existingItemIndex !== -1) {
-            storageCart[existingItemIndex].quantity += 1;
-        } else {
-            const cartProduct = {
-                id: product.id,
-                name: product.title,
-                price: product.price,
-                image: product.image,
-                quantity: 1,
-                category: product.category,
-                inStock: 10,
-                originalPrice: Math.round(product.price * 1.2)
-            };
-            storageCart.push(cartProduct);
-        }
-        
-        setStorage('storageCart', storageCart);
-        
-        showToast('Товар добавлен в корзину! 🛒');
-        triggerVibration();
-        
-        // ОБНОВЛЯЕМ ИНТЕРФЕЙС
-        if (typeof updateStorageBadge === 'function') {
-            updateStorageBadge();
-        }
-        
-        if (typeof updateCartIconCount === 'function') {
-            updateCartIconCount();
-        }
-        
-        // ЕСЛИ СТРАНИЦА СКЛАДА ОТКРЫТА - ОБНОВЛЯЕМ
-        const storagePage = document.getElementById('storage-page');
-        if (storagePage && storagePage.style.display !== 'none') {
-            if (typeof renderStorageCart === 'function') {
-                renderStorageCart();
-            }
-        }
-    });
+    // Вибрация
+    triggerVibration();
+
+     // ОБНОВЛЯЕМ СЧЕТЧИК НА ИКОНКЕ КОРЗИНЫ
+    updateCartIconCount();
+  }
 }
 
 // ===== ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ ТОВАРОВ НА СКЛАДЕ =====
@@ -6126,7 +6020,31 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ СЧЕТЧИКА НА ИКОНКЕ =====
-
+function updateCartIconCount() {
+  const cartIcon = document.getElementById('cartIcon');
+  if (!cartIcon) return;
+  
+  // Получаем актуальное количество товаров из склада
+  let totalItems = 0;
+  try {
+    const savedCart = localStorage.getItem('storageCart');
+    const storageCart = savedCart ? JSON.parse(savedCart) : [];
+    totalItems = storageCart.reduce((total, item) => total + item.quantity, 0);
+  } catch (e) {
+    console.error('Ошибка загрузки корзины:', e);
+  }
+  
+  // Создаем или обновляем счетчик
+  let countBadge = cartIcon.querySelector('.cart-count-badge');
+  if (!countBadge) {
+    countBadge = document.createElement('div');
+    countBadge.className = 'cart-count-badge';
+    cartIcon.appendChild(countBadge);
+  }
+  
+  countBadge.textContent = totalItems;
+  countBadge.style.display = totalItems > 0 ? 'flex' : 'none';
+}
 
 // Глобальные функции
 window.addToCart = addToCart;
@@ -6486,27 +6404,28 @@ function getDefaultCart() {
 
 // Инициализация страницы склада
 function initStoragePage() {
-    console.log("Инициализация страницы склада");
-    
-    getStorage('storageCart', function(storageCart) {
-        console.log("Загружено товаров для рендера:", storageCart.length);
-        window.storageCart = storageCart;
-        
-        // ОБЯЗАТЕЛЬНО ВЫЗЫВАЕМ РЕНДЕР
-        if (typeof renderStorageCart === 'function') {
-            renderStorageCart();
-        } else {
-            console.error("renderStorageCart не найдена!");
-        }
-        
-        if (typeof updateStorageTotal === 'function') {
-            updateStorageTotal();
-        }
-        
-        if (typeof updateStorageBadge === 'function') {
-            updateStorageBadge();
-        }
-    });
+  console.log("Инициализация страницы склада");
+  
+  try {
+    const savedCart = localStorage.getItem('storageCart');
+    if (savedCart) {
+      storageCart = JSON.parse(savedCart); // ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩУЮ ПЕРЕМЕННУЮ
+      console.log("Загружено товаров:", storageCart.length);
+    } else {
+      storageCart = [];
+      console.log("Корзина пуста");
+    }
+  } catch (e) {
+    console.error("Ошибка загрузки корзины:", e);
+    storageCart = [];
+  }
+  
+  renderStorageCart();
+  updateStorageTotal();
+  updateStorageBadge();
+  
+  // Остальной твой код инициализации...
+  setupStorageEventListeners();
 }
 
     // Настройка обработчиков событий
@@ -7122,51 +7041,107 @@ function triggerVibration() {
   }
 }
 
-async function addToStorageCart(product) {
-    try {
-        console.log("addToStorageCart начал работу");
-        
-        const currentCart = await getStorage('storageCart', []);
-        console.log("Текущая корзина:", currentCart);
-        
-        const existingItem = currentCart.find(item => item.id === product.id);
-        console.log("Существующий товар:", existingItem);
-        
-        if (existingItem) {
-            existingItem.quantity += 1;
-            console.log("Увеличили количество:", existingItem.quantity);
-        } else {
-            const cartProduct = {
-                id: product.id,
-                name: product.title,
-                price: product.price,
-                image: product.image,
-                quantity: 1,
-                category: getCategoryName(product.category),
-                inStock: Math.floor(Math.random() * 10) + 1,
-                originalPrice: Math.round(product.price * 1.2),
-                isNew: true
-            };
-            currentCart.push(cartProduct);
-            console.log("Добавили новый товар");
-        }
-        
-        await setStorage('storageCart', currentCart);
-        storageCart = currentCart;
-        console.log("Корзина сохранена:", storageCart);
-        
-        updateStorageBadge();
-        updateCartIconCount();
-        
-        if (document.getElementById('storage-page').style.display !== 'none') {
-            renderStorageCart();
-        }
-        
-        return true;
-    } catch (e) {
-        console.error('Ошибка добавления в корзину:', e);
-        return false;
-    }
+// Функция добавления в корзину склада
+function addToStorageCart(product) {
+  // Загружаем текущую корзину склада
+  let storageCart = [];
+  try {
+    const savedCart = localStorage.getItem('storageCart');
+    storageCart = savedCart ? JSON.parse(savedCart) : [];
+  } catch (e) {
+    console.error('Ошибка загрузки корзины склада:', e);
+    storageCart = [];
+  }
+  
+  // Проверяем, есть ли товар уже в корзине склада
+  const existingItem = storageCart.find(function(item) { 
+    return item.id === product.id; 
+  });
+  
+  if (existingItem) {
+    existingItem.quantity += 1;
+  } else {
+    // Создаем объект товара для склада
+    const cartProduct = {
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      image: product.image,
+      quantity: 1,
+      category: getCategoryName(product.category),
+      inStock: Math.floor(Math.random() * 10) + 1,
+      originalPrice: Math.round(product.price * 1.2)
+    };
+    
+    storageCart.push(cartProduct);
+  }
+  
+  // Сохраняем в localStorage
+  try {
+    localStorage.setItem('storageCart', JSON.stringify(storageCart));
+  } catch (e) {
+    console.error('Ошибка сохранения корзины склада:', e);
+  }
+  
+  // Обновляем счетчик на кнопке склада
+  updateStorageBadge();
+}
+
+// Функция обновления счетчика склада
+function updateStorageBadge() {
+  // Обновляем счетчик на кнопке склада
+  let storageCart = [];
+  try {
+    const savedCart = localStorage.getItem('storageCart');
+    storageCart = savedCart ? JSON.parse(savedCart) : [];
+  } catch (e) {
+    console.error('Ошибка загрузки корзины склада:', e);
+    storageCart = [];
+  }
+  
+  const totalItems = storageCart.reduce(function(total, item) { 
+    return total + item.quantity; 
+  }, 0);
+  
+  const badge = document.getElementById('storageCount');
+  if (badge) {
+    badge.textContent = totalItems;
+    badge.style.display = totalItems > 0 ? 'flex' : 'none';
+  }
+}
+
+// Функция получения названия категории
+function getCategoryName(category) {
+  const categories = {
+    'watches': 'Часы',
+    'headphones': 'Наушники',
+    'jewelry': 'Украшения',
+    'tshirts': 'Футболки',
+    'hoodies': 'Толстовки',
+    'hats': 'Головные уборы',
+    'shoes': 'Обувь',
+    'pants': 'Брюки'
+  };
+  return categories[category] || 'Другое';
+}
+
+// Обновляем функцию добавления в корзину
+
+function addToCart(productId) {
+  const product = productsData.find(function(p) { 
+    return p.id === productId; 
+  });
+  
+  if (product) {
+    // Добавляем товар в склад (глобальную корзину)
+    addToStorageCart(product);
+    
+    // Показываем уведомление
+    showToast('Товар добавлен в склад!');
+    
+    // Вибрация
+    triggerVibration();
+  }
 }
 
 // Добавляем вызов обновления счетчика при загрузке
@@ -7179,54 +7154,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ===== ОБНОВЛЕННАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ В КОРЗИНУ =====
 function addToCart(productId) {
-    console.log("=== addToCart вызван ===", productId);
+  const product = productsData.find(p => p.id === productId);
+  
+  if (product) {
+    // Добавляем товар в склад (глобальную корзину)
+    addToStorageCart(product);
     
-    const product = productsData.find(p => p.id === productId);
-    if (!product) return;
+    // Показываем уведомление
+    showToast('Товар добавлен в склад!');
     
-    getStorage('storageCart', function(storageCart) {
-        console.log("Загружена корзина:", storageCart);
-        
-        const existingItemIndex = storageCart.findIndex(item => item.id === product.id);
-        
-        if (existingItemIndex !== -1) {
-            storageCart[existingItemIndex].quantity += 1;
-        } else {
-            const cartProduct = {
-                id: product.id,
-                name: product.title,
-                price: product.price,
-                image: product.image,
-                quantity: 1,
-                category: product.category,
-                inStock: 10,
-                originalPrice: Math.round(product.price * 1.2)
-            };
-            storageCart.push(cartProduct);
-        }
-        
-        setStorage('storageCart', storageCart);
-        
-        showToast('Товар добавлен в корзину! 🛒');
-        triggerVibration();
-        
-        // ОБНОВЛЯЕМ ИНТЕРФЕЙС
-        if (typeof updateStorageBadge === 'function') {
-            updateStorageBadge();
-        }
-        
-        if (typeof updateCartIconCount === 'function') {
-            updateCartIconCount();
-        }
-        
-        // ЕСЛИ СТРАНИЦА СКЛАДА ОТКРЫТА - ОБНОВЛЯЕМ
-        const storagePage = document.getElementById('storage-page');
-        if (storagePage && storagePage.style.display !== 'none') {
-            if (typeof renderStorageCart === 'function') {
-                renderStorageCart();
-            }
-        }
-    });
+    // Вибрация
+    triggerVibration();
+    
+    // ОБНОВЛЯЕМ СЧЕТЧИК НА ИКОНКЕ КОРЗИНЫ
+    updateCartIconCount();
+  }
 }
 
 
@@ -7235,19 +7177,24 @@ function updateCartIconCount() {
     const cartIcon = document.getElementById('cartIcon');
     if (!cartIcon) return;
     
-    getStorage('storageCart', function(storageCart) {
-        const totalItems = storageCart.reduce((total, item) => total + item.quantity, 0);
-        
-        let countBadge = cartIcon.querySelector('.cart-count-badge');
-        if (!countBadge) {
-            countBadge = document.createElement('div');
-            countBadge.className = 'cart-count-badge';
-            cartIcon.appendChild(countBadge);
-        }
-        
-        countBadge.textContent = totalItems;
-        countBadge.style.display = totalItems > 0 ? 'block' : 'none';
-    });
+    let totalItems = 0;
+    try {
+        const savedCart = localStorage.getItem('storageCart');
+        const storageCart = savedCart ? JSON.parse(savedCart) : [];
+        totalItems = storageCart.reduce((total, item) => total + item.quantity, 0);
+    } catch (e) {
+        console.error('Ошибка загрузки корзины:', e);
+    }
+    
+    let countBadge = cartIcon.querySelector('.cart-count-badge');
+    if (!countBadge) {
+        countBadge = document.createElement('div');
+        countBadge.className = 'cart-count-badge';
+        cartIcon.appendChild(countBadge);
+    }
+    
+    countBadge.textContent = totalItems;
+    countBadge.style.display = totalItems > 0 ? 'flex' : 'none';
 }
 
 function addToStorageCart(product) {
@@ -7265,21 +7212,20 @@ function addToStorageCart(product) {
   if (existingItem) {
     existingItem.quantity += 1;
   } else {
-     // ===== ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ НАЗВАНИЯ КАТЕГОРИИ =====
-function getCategoryName(category) {
-  const categories = {
-    'watches': 'Часы',
-    'headphones': 'Наушники', 
-    'jewelry': 'Украшения',
-    'tshirts': 'Футболки',
-    'hoodies': 'Толстовки',
-    'hats': 'Головные уборы',
-    'shoes': 'Обувь',
-    'pants': 'Брюки'
-  };
-  return categories[category] || 'Другое';
-}
-  }  
+    const cartProduct = {
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      image: product.image,
+      quantity: 1,
+      category: getCategoryName(product.category),
+      inStock: Math.floor(Math.random() * 10) + 1,
+      originalPrice: Math.round(product.price * 1.2),
+      isNew: true
+    };
+    storageCart.push(cartProduct);
+  }
+  
   try {
     localStorage.setItem('storageCart', JSON.stringify(storageCart));
     console.log("Товар сохранен, всего:", storageCart.length);
@@ -7305,10 +7251,17 @@ document.head.appendChild(styleSheet);
 // ===== ОБНОВЛЯЕМ ИНИЦИАЛИЗАЦИЮ =====
 document.addEventListener('DOMContentLoaded', function() {
 
-  if (document.getElementById('storage-page')) {
-    initStoragePage(); // теперь это асинхронная функция
+ if (document.getElementById('storage-page')) {
+    initStoragePage();
   }
-  updateCartIconCount(); // теперь это асинхронная функция
+
+    updateCartIconCount();
+    
+    const originalShowProductsPage = window.showProductsPage;
+    window.showProductsPage = function() {
+        originalShowProductsPage();
+        updateCartIconCount();
+    };
 });
 
 // ===== ОБНОВЛЯЕМ РЕНДЕР ТОВАРОВ =====
@@ -7372,67 +7325,6 @@ document.head.appendChild(inCartStyleSheet);
 var swipeStyle = document.createElement('style');
 swipeStyle.textContent = '.cart-item { transition: transform 0.3s ease; position: relative; }';
 document.head.appendChild(swipeStyle);
-
-// ===== ТЕСТ ХРАНИЛИЩА =====
-async function testStorage() {
-    console.log("=== ТЕСТ ХРАНИЛИЩА ===");
-    console.log("isTelegramApp:", isTelegramApp);
-    
-    // Тест записи
-    await setStorage('test_key', {test: true, time: new Date()});
-    
-    // Тест чтения
-    const testData = await getStorage('test_key', {error: true});
-    console.log("Тестовые данные:", testData);
-    
-    // Проверяем корзину
-    const cartData = await getStorage('storageCart', []);
-    console.log("Данные корзины:", cartData);
-    
-    return true;
-}
-
-// Автопроверка при загрузке (опционально)
-document.addEventListener('DOMContentLoaded', function() {
-    // Раскомментируй следующую строку для автоматической проверки:
-    // testStorage();
-});
-
-// Сохраняем корзину при закрытии страницы
-window.addEventListener('beforeunload', function() {
-    if (storageCart && storageCart.length > 0) {
-        setStorage('storageCart', storageCart);
-        console.log("Корзина сохранена при закрытии");
-    }
-});
-
-function updateStorageBadge() {
-    getStorage('storageCart', function(storageCart) {
-        const totalItems = storageCart.reduce((total, item) => total + item.quantity, 0);
-        const badge = document.getElementById('storageCount');
-        if (badge) {
-            badge.textContent = totalItems;
-            badge.style.display = totalItems > 0 ? 'flex' : 'none';
-        }
-    });
-}
-
-function updateCartIconCount() {
-    getStorage('storageCart', function(storageCart) {
-        const totalItems = storageCart.reduce((total, item) => total + item.quantity, 0);
-        const cartIcon = document.getElementById('cartIcon');
-        if (cartIcon) {
-            let countBadge = cartIcon.querySelector('.cart-count-badge');
-            if (!countBadge) {
-                countBadge = document.createElement('div');
-                countBadge.className = 'cart-count-badge';
-                cartIcon.appendChild(countBadge);
-            }
-            countBadge.textContent = totalItems;
-            countBadge.style.display = totalItems > 0 ? 'block' : 'none';
-        }
-    });
-}
 </script>
 </body>
 </html>
