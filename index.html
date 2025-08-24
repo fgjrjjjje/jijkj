@@ -5793,7 +5793,7 @@ setupStorageSwipe(cartItem, product.id);
 }
 
 function changeStorageQuantity(productId, change) {
-  let storageCart = [];
+  
   try {
     const savedCart = localStorage.getItem('storageCart');
     storageCart = savedCart ? JSON.parse(savedCart) : [];
@@ -5831,7 +5831,7 @@ function toggleFavorite(productId) {
 }
 
 function updateStorageTotal() {
-  let storageCart = [];
+  
   try {
     const savedCart = localStorage.getItem('storageCart');
     storageCart = savedCart ? JSON.parse(savedCart) : [];
@@ -5853,7 +5853,7 @@ function updateStorageTotal() {
 
 function updateStorageBadge() {
   // Обновляем счетчик на кнопке склада
-  let storageCart = [];
+ 
   try {
     const savedCart = localStorage.getItem('storageCart');
     storageCart = savedCart ? JSON.parse(savedCart) : [];
@@ -6406,19 +6406,19 @@ function getDefaultCart() {
 function initStoragePage() {
     console.log("Инициализация страницы склада");
     
-    // Загружаем КАК БАЛАНС
+    // Используем глобальную переменную
     try {
         const savedCart = localStorage.getItem('storageCart');
         if (savedCart) {
-            storageCart = JSON.parse(savedCart);
-            console.log("Загружено товаров:", storageCart.length);
+            window.storageCart = JSON.parse(savedCart);
+            console.log("Загружено товаров:", window.storageCart.length);
         } else {
-            storageCart = [];
+            window.storageCart = [];
             console.log("Корзина пуста");
         }
     } catch (e) {
         console.error("Ошибка загрузки:", e);
-        storageCart = [];
+        window.storageCart = [];
     }
     
     // Рендерим корзину
@@ -6426,6 +6426,7 @@ function initStoragePage() {
     updateStorageTotal();
     updateStorageBadge();
 }
+
     // Настройка обработчиков событий
     setupStorageEventListeners();
     
@@ -7043,26 +7044,27 @@ function triggerVibration() {
 function addToStorageCart(product) {
     console.log("Добавление товара:", product.title);
     
-    // Загружаем корзину ТОЧНО ТАК ЖЕ как баланс
-    let storageCart = [];
+    // Используем ГЛОБАЛЬНУЮ переменную storageCart
+    if (!window.storageCart) {
+        window.storageCart = [];
+    }
+    
+    // Загружаем из localStorage для синхронизации
     try {
         const savedCart = localStorage.getItem('storageCart');
         if (savedCart) {
-            storageCart = JSON.parse(savedCart);
-        } else {
-            storageCart = [];
+            window.storageCart = JSON.parse(savedCart);
         }
     } catch (e) {
-        console.error('Ошибка загрузки корзины:', e);
-        storageCart = [];
+        console.error('Ошибка загрузки:', e);
+        window.storageCart = [];
     }
     
-    // Проверяем есть ли товар
-    const existingItem = storageCart.find(item => item.id === product.id);
+    // Ищем товар
+    const existingItem = window.storageCart.find(item => item.id === product.id);
     
     if (existingItem) {
         existingItem.quantity += 1;
-        console.log("Увеличили количество");
     } else {
         // Добавляем новый товар
         const cartProduct = {
@@ -7075,21 +7077,15 @@ function addToStorageCart(product) {
             inStock: Math.floor(Math.random() * 10) + 1,
             originalPrice: Math.round(product.price * 1.2)
         };
-        storageCart.push(cartProduct);
-        console.log("Добавили новый товар");
+        window.storageCart.push(cartProduct);
     }
     
-    // Сохраняем ТОЧНО ТАК ЖЕ как баланс
+    // Сохраняем в localStorage
     try {
-        localStorage.setItem('storageCart', JSON.stringify(storageCart));
-        console.log("✅ Корзина сохранена в localStorage");
-        
-        // ОБНОВЛЯЕМ ГЛОБАЛЬНУЮ ПЕРЕМЕННУЮ
-        window.storageCart = storageCart;
-        
+        localStorage.setItem('storageCart', JSON.stringify(window.storageCart));
+        console.log("✅ Корзина сохранена");
     } catch (e) {
         console.error('❌ Ошибка сохранения:', e);
-        return false;
     }
     
     // Обновляем интерфейс
@@ -7126,64 +7122,6 @@ function updateCartIconCount() {
     countBadge.style.display = totalItems > 0 ? 'flex' : 'none';
 }
 
-function addToStorageCart(product) {
-    console.log("Добавление товара:", product.title);
-    
-    // Загружаем корзину ТОЧНО ТАК ЖЕ как баланс
-    let storageCart = [];
-    try {
-        const savedCart = localStorage.getItem('storageCart');
-        if (savedCart) {
-            storageCart = JSON.parse(savedCart);
-        } else {
-            storageCart = [];
-        }
-    } catch (e) {
-        console.error('Ошибка загрузки корзины:', e);
-        storageCart = [];
-    }
-    
-    // Проверяем есть ли товар
-    const existingItem = storageCart.find(item => item.id === product.id);
-    
-    if (existingItem) {
-        existingItem.quantity += 1;
-        console.log("Увеличили количество");
-    } else {
-        // Добавляем новый товар
-        const cartProduct = {
-            id: product.id,
-            name: product.title,
-            price: product.price,
-            image: product.image,
-            quantity: 1,
-            category: product.category,
-            inStock: Math.floor(Math.random() * 10) + 1,
-            originalPrice: Math.round(product.price * 1.2)
-        };
-        storageCart.push(cartProduct);
-        console.log("Добавили новый товар");
-    }
-    
-    // Сохраняем ТОЧНО ТАК ЖЕ как баланс
-    try {
-        localStorage.setItem('storageCart', JSON.stringify(storageCart));
-        console.log("✅ Корзина сохранена в localStorage");
-        
-        // ОБНОВЛЯЕМ ГЛОБАЛЬНУЮ ПЕРЕМЕННУЮ
-        window.storageCart = storageCart;
-        
-    } catch (e) {
-        console.error('❌ Ошибка сохранения:', e);
-        return false;
-    }
-    
-    // Обновляем интерфейс
-    updateStorageBadge();
-    updateCartIconCount();
-    
-    return true;
-}
 
 // ===== ДОБАВЛЯЕМ CSS ДЛЯ СЧЕТЧИКА КОРЗИНЫ =====
 const cartBadgeStyles = '.cart-count-badge { position: absolute; top: -5px; right: -5px; background: #ff3b30; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; z-index: 10; }';
@@ -7220,7 +7158,7 @@ function renderProducts(productsList) {
     
     document.getElementById('emptyState').style.display = 'none';
     
-    let storageCart = [];
+    
     try {
         const savedCart = localStorage.getItem('storageCart');
         storageCart = savedCart ? JSON.parse(savedCart) : [];
