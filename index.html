@@ -7103,7 +7103,17 @@ function addToStorageCart(product) {
     }
     
     return true;
+
+     try {
+        localStorage.setItem('storageCart', JSON.stringify(storageCart));
+        console.log("✓ Корзина сохранена принудительно");
+        return true;
+    } catch (e) {
+        console.error("✗ Ошибка принудительного сохранения:", e);
+        return false;
+    }
 }
+
 
 
 // ===== НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ СЧЕТЧИКА НА ИКОНКЕ =====
