@@ -5667,52 +5667,80 @@ let currentSort = 'none';
 
 // ===== ФУНКЦИИ ДЛЯ КОРЗИНЫ =====
 function addToCart(productId) {
-    console.log("🛒 Добавляем товар ID:", productId);
+    console.log("Добавляем товар в Telegram:", productId);
     
     const product = productsData.find(p => p.id === productId);
-    if (!product) {
-        console.error("❌ Товар не найден");
-        return;
-    }
+    if (!product) return;
     
-    // ПРОСТОЙ СПОСОБ КАК С БАЛАНСОМ
-    try {
-        // 1. Получаем текущую корзину
-        const savedCart = localStorage.getItem('storageCart');
-        let cart = savedCart ? JSON.parse(savedCart) : [];
-        
-        // 2. Проверяем есть ли товар
-        const existingItem = cart.find(item => item.id === productId);
-        
-        if (existingItem) {
-            existingItem.quantity += 1;
-        } else {
-            // 3. Добавляем новый товар
-            cart.push({
-                id: product.id,
-                name: product.title,
-                price: product.price,
-                image: product.image,
-                quantity: 1,
-                category: product.category
+    // ДЛЯ TELEGRAM - используем их Storage
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
+        // Telegram Cloud Storage
+        Telegram.WebApp.CloudStorage.getItem('storageCart', (err, saved) => {
+            let cart = [];
+            if (!err && saved) {
+                try {
+                    cart = JSON.parse(saved);
+                } catch (e) {
+                    console.error("Ошибка парсинга:", e);
+                    cart = [];
+                }
+            }
+            
+            // Добавляем товар
+            const existingItem = cart.find(item => item.id === productId);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.title, 
+                    price: product.price,
+                    image: product.image,
+                    quantity: 1,
+                    category: product.category
+                });
+            }
+            
+            // Сохраняем обратно
+            Telegram.WebApp.CloudStorage.setItem('storageCart', JSON.stringify(cart), (err) => {
+                if (err) {
+                    console.error("Ошибка сохранения в Telegram:", err);
+                } else {
+                    console.log("✅ Сохранено в Telegram Cloud!");
+                    showToast('Товар добавлен!');
+                    triggerVibration();
+                    updateCartIconCount();
+                }
             });
+        });
+    } else {
+        // Fallback: обычный localStorage (для браузера)
+        try {
+            const saved = localStorage.getItem('storageCart');
+            let cart = saved ? JSON.parse(saved) : [];
+            
+            const existingItem = cart.find(item => item.id === productId);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.title,
+                    price: product.price,
+                    image: product.image,
+                    quantity: 1,
+                    category: product.category
+                });
+            }
+            
+            localStorage.setItem('storageCart', JSON.stringify(cart));
+            showToast('Товар добавлен!');
+            triggerVibration();
+            updateCartIconCount();
+            
+        } catch (e) {
+            console.error("Ошибка:", e);
         }
-        
-        // 4. Сохраняем обратно (КАК БАЛАНС)
-        localStorage.setItem('storageCart', JSON.stringify(cart));
-        console.log("✅ Товар добавлен, всего в корзине:", cart.length);
-        
-        // 5. Показываем уведомление
-        showToast('Товар добавлен в корзину!');
-        triggerVibration();
-        
-        // 6. Обновляем счетчики
-        updateStorageBadge();
-        updateCartIconCount();
-        
-    } catch (e) {
-        console.error("❌ Ошибка добавления товара:", e);
-        showToast('Ошибка добавления!');
     }
 }
 
@@ -6436,27 +6464,46 @@ function getDefaultCart() {
 
 // Инициализация страницы склада
 function initStoragePage() {
-    console.log("📦 Инициализация склада");
+    console.log("Инициализация для Telegram");
     
-    try {
-        // ПРОСТО ЗАГРУЖАЕМ ИЗ LOCALSTORAGE
-        const savedCart = localStorage.getItem('storageCart');
-        if (savedCart) {
-            storageCart = JSON.parse(savedCart);
-            console.log("Загружено товаров:", storageCart.length);
-        } else {
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
+        // Telegram Cloud Storage
+        Telegram.WebApp.CloudStorage.getItem('storageCart', (err, saved) => {
+            if (err) {
+                console.error("Ошибка загрузки из Telegram:", err);
+                storageCart = [];
+            } else if (saved) {
+                try {
+                    storageCart = JSON.parse(saved);
+                    console.log("Загружено из Telegram:", storageCart.length);
+                } catch (e) {
+                    console.error("Ошибка парсинга:", e);
+                    storageCart = [];
+                }
+            } else {
+                storageCart = [];
+                console.log("Корзина пуста в Telegram");
+            }
+            
+            renderStorageCart();
+            updateStorageTotal();
+            updateStorageBadge();
+        });
+    } else {
+        // Обычный браузер
+        try {
+            const saved = localStorage.getItem('storageCart');
+            storageCart = saved ? JSON.parse(saved) : [];
+            console.log("Загружено из localStorage:", storageCart.length);
+            
+            renderStorageCart();
+            updateStorageTotal();
+            updateStorageBadge();
+            
+        } catch (e) {
+            console.error("Ошибка:", e);
             storageCart = [];
-            console.log("Корзина пуста");
         }
-        
-        // Рендерим корзину
-        renderStorageCart();
-        updateStorageTotal();
-        updateStorageBadge();
-        
-    } catch (e) {
-        console.error("❌ Ошибка загрузки корзины:", e);
-        storageCart = [];
     }
 }
 
