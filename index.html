@@ -5665,58 +5665,6 @@ let currentProduct = null;
 let activeCategory = 'all';
 let currentSort = 'none';
 
-// ===== ФУНКЦИИ ДЛЯ КОРЗИНЫ =====
-function addToCart(productId) {
-    console.log("Добавляем товар:", productId);
-    
-    const product = productsData.find(p => p.id === productId);
-    if (!product) return;
-    
-    // ПРОСТОЙ СПОСОБ - используем sessionStorage (работает в Telegram)
-    try {
-        // 1. Получаем корзину из sessionStorage
-        const saved = sessionStorage.getItem('storageCart');
-        let cart = saved ? JSON.parse(saved) : [];
-        
-        // 2. Проверяем есть ли товар
-        let found = false;
-        for (let i = 0; i < cart.length; i++) {
-            if (cart[i].id === productId) {
-                cart[i].quantity += 1;
-                found = true;
-                break;
-            }
-        }
-        
-        // 3. Если нет - добавляем
-        if (!found) {
-            cart.push({
-                id: product.id,
-                name: product.title,
-                price: product.price, 
-                image: product.image,
-                quantity: 1,
-                category: product.category
-            });
-        }
-        
-        // 4. Сохраняем в sessionStorage
-        sessionStorage.setItem('storageCart', JSON.stringify(cart));
-        console.log("✅ Товар добавлен! В корзине:", cart.length, "товаров");
-        
-        // 5. Показываем уведомление
-        showToast('Товар добавлен в корзину! 🛒');
-        triggerVibration();
-        
-        // 6. Обновляем счетчик
-        updateCartIconCount();
-        
-    } catch (e) {
-        console.error("❌ Ошибка:", e);
-        showToast('Ошибка добавления!');
-    }
-}
-
 // ===== ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ ТОВАРОВ НА СКЛАДЕ =====
 function renderStorageCart() {
   var cartItemsContainer = document.getElementById('cart-items');
@@ -6438,31 +6386,6 @@ function getDefaultCart() {
         { id: 2, name: "AirPods Pro", price: 19990, image: "headphones", quantity: 2, category: "Аксессуары", inStock: 10 },
         { id: 3, name: "Apple Watch S7", price: 39990, image: "clock", quantity: 1, category: "Электроника", inStock: 3 }
     ];
-}
-
-// Инициализация страницы склада
-function initStoragePage() {
-    console.log("Инициализация склада");
-    
-    try {
-        // Используем sessionStorage вместо localStorage
-        const saved = sessionStorage.getItem('storageCart');
-        if (saved) {
-            storageCart = JSON.parse(saved);
-            console.log("Загружено товаров:", storageCart.length);
-        } else {
-            storageCart = [];
-            console.log("Корзина пуста");
-        }
-        
-        renderStorageCart();
-        updateStorageTotal();
-        updateStorageBadge();
-        
-    } catch (e) {
-        console.error("Ошибка загрузки:", e);
-        storageCart = [];
-    }
 }
 
     // Настройка обработчиков событий
@@ -7237,6 +7160,145 @@ function forceSaveCart() {
 }
 
 // Вызывай после каждого изменения корзины
+
+// ===== TELEGRAM CLOUD STORAGE ФУНКЦИИ =====
+function saveToTelegramStorage(key, value, callback) {
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
+        Telegram.WebApp.CloudStorage.setItem(key, JSON.stringify(value), (err) => {
+            if (err) {
+                console.error('❌ Ошибка Telegram Storage:', err);
+                if (callback) callback(false);
+            } else {
+                console.log('✅ Сохранено в Telegram Cloud');
+                if (callback) callback(true);
+            }
+        });
+    } else {
+        console.log('ℹ️ Telegram Storage недоступен, используем localStorage');
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            if (callback) callback(true);
+        } catch (e) {
+            console.error('❌ Ошибка localStorage:', e);
+            if (callback) callback(false);
+        }
+    }
+}
+
+function loadFromTelegramStorage(key, callback) {
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
+        Telegram.WebApp.CloudStorage.getItem(key, (err, data) => {
+            if (err) {
+                console.log('ℹ️ Данных в Telegram Storage нет');
+                if (callback) callback([]);
+            } else if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (callback) callback(parsed);
+                } catch (e) {
+                    console.error('❌ Ошибка парсинга:', e);
+                    if (callback) callback([]);
+                }
+            } else {
+                if (callback) callback([]);
+            }
+        });
+    } else {
+        console.log('ℹ️ Telegram Storage недоступен, используем localStorage');
+        try {
+            const data = localStorage.getItem(key);
+            if (callback) callback(data ? JSON.parse(data) : []);
+        } catch (e) {
+            console.error('❌ Ошибка localStorage:', e);
+            if (callback) callback([]);
+        }
+    }
+}
+
+// ===== ОБНОВЛЕННАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ В КОРЗИНУ =====
+function addToCart(productId) {
+    const product = productsData.find(p => p.id === productId);
+    if (!product) return;
+    
+    console.log('🛒 Добавляем товар через Telegram API');
+    
+    // Загружаем корзину из Telegram Storage
+    loadFromTelegramStorage('storageCart', (currentCart) => {
+        // Добавляем товар
+        const existingItem = currentCart.find(item => item.id === product.id);
+        
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            currentCart.push({
+                id: product.id,
+                name: product.title,
+                price: product.price,
+                image: product.image,
+                quantity: 1,
+                category: product.category,
+                inStock: Math.floor(Math.random() * 10) + 1,
+                originalPrice: Math.round(product.price * 1.2)
+            });
+        }
+        
+        // Сохраняем обратно в Telegram Storage
+        saveToTelegramStorage('storageCart', currentCart, (success) => {
+            if (success) {
+                showToast('Товар добавлен! ✅');
+                triggerVibration();
+                updateCartIconCount();
+                
+                // Обновляем страницу если открыта
+                if (document.getElementById('storage-page').style.display !== 'none') {
+                    renderStorageCart();
+                }
+            } else {
+                showToast('Ошибка сохранения!');
+            }
+        });
+    });
+}
+
+// ===== ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ СКЛАДА =====
+function initStoragePage() {
+    console.log('📦 Инициализация через Telegram API');
+    
+    loadFromTelegramStorage('storageCart', (cart) => {
+        window.storageCart = cart;
+        console.log('Загружено товаров:', cart.length);
+        
+        renderStorageCart();
+        updateStorageTotal();
+        updateStorageBadge();
+    });
+}
+
+// ===== ПРОВЕРКА ДОСТУПНОСТИ TELEGRAM STORAGE =====
+function checkTelegramStorage() {
+    console.log('=== ПРОВЕРКА TELEGRAM STORAGE ===');
+    
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage) {
+        console.log('✅ Telegram Cloud Storage доступен');
+        
+        // Тестируем запись
+        Telegram.WebApp.CloudStorage.setItem('test_key', 'test_value', (err) => {
+            if (err) {
+                console.error('❌ Тест записи не прошел:', err);
+            } else {
+                console.log('✅ Тест записи прошел успешно');
+            }
+        });
+        
+    } else {
+        console.log('❌ Telegram Cloud Storage недоступен');
+        console.log('Telegram:', !!window.Telegram);
+        console.log('WebApp:', !!window.Telegram?.WebApp);
+        console.log('CloudStorage:', !!window.Telegram?.WebApp?.CloudStorage);
+    }
+}
+
+// Вызови в консоли: checkTelegramStorage()
 </script>
 </body>
 </html>
