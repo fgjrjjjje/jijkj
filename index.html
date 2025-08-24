@@ -5667,21 +5667,53 @@ let currentSort = 'none';
 
 // ===== ФУНКЦИИ ДЛЯ КОРЗИНЫ =====
 function addToCart(productId) {
-  const product = productsData.find(p => p.id === productId);
-  
-  if (product) {
-    // Добавляем товар в склад (глобальную корзину)
-    addToStorageCart(product);
+    console.log("🛒 Добавляем товар ID:", productId);
     
-    // Показываем уведомление
-    showToast('Товар добавлен в склад!');
+    const product = productsData.find(p => p.id === productId);
+    if (!product) {
+        console.error("❌ Товар не найден");
+        return;
+    }
     
-    // Вибрация
-    triggerVibration();
-
-     // ОБНОВЛЯЕМ СЧЕТЧИК НА ИКОНКЕ КОРЗИНЫ
-    updateCartIconCount();
-  }
+    // ПРОСТОЙ СПОСОБ КАК С БАЛАНСОМ
+    try {
+        // 1. Получаем текущую корзину
+        const savedCart = localStorage.getItem('storageCart');
+        let cart = savedCart ? JSON.parse(savedCart) : [];
+        
+        // 2. Проверяем есть ли товар
+        const existingItem = cart.find(item => item.id === productId);
+        
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            // 3. Добавляем новый товар
+            cart.push({
+                id: product.id,
+                name: product.title,
+                price: product.price,
+                image: product.image,
+                quantity: 1,
+                category: product.category
+            });
+        }
+        
+        // 4. Сохраняем обратно (КАК БАЛАНС)
+        localStorage.setItem('storageCart', JSON.stringify(cart));
+        console.log("✅ Товар добавлен, всего в корзине:", cart.length);
+        
+        // 5. Показываем уведомление
+        showToast('Товар добавлен в корзину!');
+        triggerVibration();
+        
+        // 6. Обновляем счетчики
+        updateStorageBadge();
+        updateCartIconCount();
+        
+    } catch (e) {
+        console.error("❌ Ошибка добавления товара:", e);
+        showToast('Ошибка добавления!');
+    }
 }
 
 // ===== ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ ТОВАРОВ НА СКЛАДЕ =====
@@ -6404,27 +6436,28 @@ function getDefaultCart() {
 
 // Инициализация страницы склада
 function initStoragePage() {
-    console.log("Инициализация страницы склада");
+    console.log("📦 Инициализация склада");
     
-    // Используем глобальную переменную
     try {
+        // ПРОСТО ЗАГРУЖАЕМ ИЗ LOCALSTORAGE
         const savedCart = localStorage.getItem('storageCart');
         if (savedCart) {
-            window.storageCart = JSON.parse(savedCart);
-            console.log("Загружено товаров:", window.storageCart.length);
+            storageCart = JSON.parse(savedCart);
+            console.log("Загружено товаров:", storageCart.length);
         } else {
-            window.storageCart = [];
+            storageCart = [];
             console.log("Корзина пуста");
         }
+        
+        // Рендерим корзину
+        renderStorageCart();
+        updateStorageTotal();
+        updateStorageBadge();
+        
     } catch (e) {
-        console.error("Ошибка загрузки:", e);
-        window.storageCart = [];
+        console.error("❌ Ошибка загрузки корзины:", e);
+        storageCart = [];
     }
-    
-    // Рендерим корзину
-    renderStorageCart();
-    updateStorageTotal();
-    updateStorageBadge();
 }
 
     // Настройка обработчиков событий
