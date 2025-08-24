@@ -7269,6 +7269,20 @@ document.head.appendChild(inCartStyleSheet);
 var swipeStyle = document.createElement('style');
 swipeStyle.textContent = '.cart-item { transition: transform 0.3s ease; position: relative; }';
 document.head.appendChild(swipeStyle);
+
+// Принудительное сохранение при каждом изменении
+function forceSaveCart() {
+    if (window.storageCart) {
+        try {
+            localStorage.setItem('storageCart', JSON.stringify(window.storageCart));
+            console.log("💾 Корзина принудительно сохранена");
+        } catch (e) {
+            console.error("Ошибка принудительного сохранения:", e);
+        }
+    }
+}
+
+// Вызывай после каждого изменения корзины
 </script>
 </body>
 </html>
